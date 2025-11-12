@@ -1,0 +1,16 @@
+﻿{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "Dev": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5282",
+      "environmentVariables": {
+        "KEYVAULT_ENDPOINT": "https://up-cohesia-test-kv.vault.azure.net/",
+        "SERVICEIDENTITY_CLIENTID": "d5546671-852a-4251-b46f-bf660df2f39b",
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
