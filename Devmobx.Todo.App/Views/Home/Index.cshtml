@@ -1,0 +1,149 @@
+@{ ViewData["Title"] = "Dashboard"; }
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Todo App</title>
+    <link rel="stylesheet" href="~/css/main.css" />
+    <link rel="stylesheet" href="~/css/home.css" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="navbar-container">
+        <div class="navbar-brand">
+          <img src="~/images/logo.png" alt="Todo App" class="navbar-logo" />
+          <span class="navbar-title">Todo App</span>
+        </div>
+        <div class="navbar-menu">
+          <a href="#" class="nav-link">Dashboard</a>
+          <a href="#" class="nav-link">Settings</a>
+          <button class="btn btn-outline btn-sm" onclick="handleLogout()">
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-container">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>My Lists</h2>
+          <button class="btn btn-primary btn-sm" onclick="showNewListModal()">
+            + New List
+          </button>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-item active">
+            <span class="nav-icon">📋</span>
+            All Tasks
+          </a>
+          <a href="#" class="nav-item">
+            <span class="nav-icon">⭐</span>
+            Important
+          </a>
+          <a href="#" class="nav-item">
+            <span class="nav-icon">📅</span>
+            Today
+          </a>
+          <a href="#" class="nav-item">
+            <span class="nav-icon">🗓️</span>
+            Upcoming
+          </a>
+          <a href="#" class="nav-item">
+            <span class="nav-icon">✅</span>
+            Completed
+          </a>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <div class="content-header">
+          <div class="header-info">
+            <h1 id="pageTitle">All Tasks</h1>
+            <p class="header-subtitle" id="taskCount">0 tasks</p>
+          </div>
+          <button class="btn btn-primary" onclick="showNewTaskModal()">+ New Task</button>
+        </div>
+
+        <div id="tasksContainer" class="tasks-grid">
+          <div class="empty-state">
+            <div class="empty-icon">✨</div>
+            <h2>No tasks yet</h2>
+            <p>Create your first task to get started</p>
+            <button class="btn btn-primary" onclick="showNewTaskModal()">
+              Create Task
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- New Task Modal -->
+    <div id="taskModal" class="modal" style="display: none">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>New Task</h2>
+          <button class="modal-close" onclick="closeTaskModal()">&times;</button>
+        </div>
+        <form id="taskForm" class="modal-form">
+          <div class="form-group">
+            <label for="taskTitle" class="form-label">Title</label>
+            <input
+              type="text"
+              id="taskTitle"
+              class="form-input"
+              placeholder="Task title"
+              required />
+          </div>
+
+          <div class="form-group">
+            <label for="taskDescription" class="form-label">Description</label>
+            <textarea
+              id="taskDescription"
+              class="form-input"
+              placeholder="Task description"
+              rows="4"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="taskPriority" class="form-label">Priority</label>
+              <select id="taskPriority" class="form-input" required>
+                <option value="1">Low</option>
+                <option value="2">Medium</option>
+                <option value="3" selected>Normal</option>
+                <option value="4">High</option>
+                <option value="5">Urgent</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="taskDueDate" class="form-label">Due Date</label>
+              <input type="date" id="taskDueDate" class="form-input" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="taskTags" class="form-label">Tags</label>
+            <input
+              type="text"
+              id="taskTags"
+              class="form-input"
+              placeholder="Separate tags with commas" />
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeTaskModal()">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Create Task</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="alertContainer"></div>
+    <script src="~/js/main.js"></script>
+  </body>
+</html>

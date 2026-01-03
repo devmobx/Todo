@@ -1,0 +1,128 @@
+@{ ViewData["Title"] = "Create Account"; }
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Todo App</title>
+    <link rel="stylesheet" href="~/css/main.css" />
+    <link rel="stylesheet" href="~/css/auth.css" />
+  </head>
+  <body>
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="auth-header">
+          <img src="~/images/logo.png" alt="Todo App Logo" class="auth-logo" />
+          <h1>Create Account</h1>
+          <p class="subtitle">Join us to manage your todos</p>
+        </div>
+
+        <form id="registerForm" class="auth-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="firstName" class="form-label">First Name</label>
+              <input
+                type="text"
+                id="firstName"
+                name="firstName"
+                class="form-input"
+                placeholder="John"
+                required />
+              <span class="error-message" id="firstNameError"></span>
+            </div>
+
+            <div class="form-group">
+              <label for="lastName" class="form-label">Last Name</label>
+              <input
+                type="text"
+                id="lastName"
+                name="lastName"
+                class="form-input"
+                placeholder="Doe"
+                required />
+              <span class="error-message" id="lastNameError"></span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="email" class="form-label">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              class="form-input"
+              placeholder="you@example.com"
+              required />
+            <span class="error-message" id="emailError"></span>
+          </div>
+
+          <div class="form-group">
+            <label for="birthDate" class="form-label">Date of Birth</label>
+            <input
+              type="date"
+              id="birthDate"
+              name="birthDate"
+              class="form-input"
+              required />
+            <span class="error-message" id="birthDateError"></span>
+            <small class="form-help">Must be at least 12 years old</small>
+          </div>
+
+          <div class="form-group">
+            <label for="password" class="form-label">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input"
+              placeholder="••••••••"
+              minlength="8"
+              required />
+            <span class="error-message" id="passwordError"></span>
+            <small class="form-help">Minimum 8 characters</small>
+          </div>
+
+          <div class="form-group">
+            <label for="confirmPassword" class="form-label">Confirm Password</label>
+            <input
+              type="password"
+              id="confirmPassword"
+              name="confirmPassword"
+              class="form-input"
+              placeholder="••••••••"
+              required />
+            <span class="error-message" id="confirmPasswordError"></span>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="agreeTerms" required />
+              <span>I agree to the Terms of Service and Privacy Policy</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg">Create Account</button>
+        </form>
+
+        <div class="auth-divider">
+          <span>or</span>
+        </div>
+
+        <div class="auth-footer">
+          <p class="footer-text">
+            Already have an account?
+            <a href="/login" class="auth-link">Sign in</a>
+          </p>
+        </div>
+      </div>
+
+      <div id="alertContainer"></div>
+    </div>
+
+    <script src="~/js/auth.js"></script>
+    <script>
+      document.getElementById('registerForm').addEventListener('submit', handleRegister);
+    </script>
+  </body>
+</html>

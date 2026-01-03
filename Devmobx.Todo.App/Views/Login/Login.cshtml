@@ -1,0 +1,77 @@
+@{ ViewData["Title"] = "Sign In"; }
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Todo App</title>
+    <link rel="stylesheet" href="~/css/main.css" />
+    <link rel="stylesheet" href="~/css/auth.css" />
+  </head>
+  <body>
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="auth-header">
+          <img src="~/images/logo.png" alt="Todo App Logo" class="auth-logo" />
+          <h1>Welcome Back</h1>
+          <p class="subtitle">Sign in to your account</p>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <div class="form-group">
+            <label for="email" class="form-label">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              class="form-input"
+              placeholder="you@example.com"
+              required />
+            <span class="error-message" id="emailError"></span>
+          </div>
+
+          <div class="form-group">
+            <label for="password" class="form-label">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input"
+              placeholder="••••••••"
+              required />
+            <span class="error-message" id="passwordError"></span>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="remember" name="remember" />
+              <span>Remember me</span>
+            </label>
+            <a href="/forgot-password" class="forgot-password-link">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg">Sign In</button>
+        </form>
+
+        <div class="auth-divider">
+          <span>or</span>
+        </div>
+
+        <div class="auth-footer">
+          <p class="footer-text">
+            Don't have an account?
+            <a href="/register" class="auth-link">Create one</a>
+          </p>
+        </div>
+      </div>
+
+      <div id="alertContainer"></div>
+    </div>
+
+    <script src="~/js/auth.js"></script>
+    <script>
+      document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    </script>
+  </body>
+</html>
