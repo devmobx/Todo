@@ -5,11 +5,11 @@ using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.EntityFrameworkCore;
-using TodoApi.App.Storage;
-using TodoApi.App.Extensions;
+using TodoApi.Storage;
 using Microsoft.AspNetCore.CookiePolicy;
 using System.Threading.RateLimiting;
 using TodoApi.Core.Hosting;
+using TodoApi.Core.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -65,7 +65,7 @@ builder.Services.AddControllersWithViews(options =>
 
 var cosmos = builder.Configuration.GetSection("Cosmos");
 
-builder.Services.AddDbContext<TodoApiDbContext>(options =>
+builder.Services.AddDbContext<DataBaseContext>(options =>
     options.UseCosmos(
         accountEndpoint: cosmos["Uri"]!,
         accountKey: cosmos["PrimaryKey"]!,
@@ -77,7 +77,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<TodoApiDbContext>();
+    var dbContext = scope.ServiceProvider.GetRequiredService<DataBaseContext>();
     await dbContext.EnsureContainersCreatedAsync();
 }
 

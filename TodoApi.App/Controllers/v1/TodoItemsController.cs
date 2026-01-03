@@ -1,18 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using TodoApi.App.Attributes;
-using TodoApi.App.Storage;
-using TodoApi.App.Models.v1;
 using Microsoft.AspNetCore.Authorization;
+using TodoApi.Storage;
+using TodoApi.Storage.Models.v1;
+using TodoApi.Core.Attributes;
 
 namespace TodoApi.App.Controllers.v1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [ApiRoute("")]
-    public class TodoItemsController(TodoApiDbContext db) : ControllerBase
+    public class TodoItemsController(DataBaseContext db) : ControllerBase
     {
-        private readonly TodoApiDbContext _db = db;
+        private readonly DataBaseContext _db = db;
 
         [Authorize]
         [HttpPost("item")]
@@ -77,7 +77,7 @@ namespace TodoApi.App.Controllers.v1
 
             foundItem.Title = item.Title ?? foundItem.Title;
             foundItem.Description = item.Description ?? foundItem.Description;
-            foundItem.DueDate = item.DueDate ?? foundItem.DueDate;
+            foundItem.DueDate = item.DueDate != default ? item.DueDate : foundItem.DueDate;
             foundItem.Tags = item.Tags ?? foundItem.Tags;
             foundItem.UpdatedAt = DateTime.UtcNow;
 

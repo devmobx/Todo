@@ -1,18 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using TodoApi.App.Attributes;
-using TodoApi.App.Storage;
-using TodoApi.App.Models.v1;
 using Microsoft.AspNetCore.Authorization;
+using TodoApi.Storage;
+using TodoApi.Core.Attributes;
+using TodoApi.Storage.Models.v1;
 
 namespace TodoApi.App.Controllers.v1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [ApiRoute("item")]
-    public class RemindersController(TodoApiDbContext db) : ControllerBase
+    public class RemindersController(DataBaseContext db) : ControllerBase
     {
-        private readonly TodoApiDbContext _db = db;
+        private readonly DataBaseContext _db = db;
 
         [Authorize]
         [HttpPost("{todoId}/reminder")]

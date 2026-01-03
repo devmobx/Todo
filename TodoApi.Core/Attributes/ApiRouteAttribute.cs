@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace TodoApi.App.Attributes
+namespace TodoApi.Core.Attributes
 {
     public class ApiRouteAttribute : RouteAttribute
     {

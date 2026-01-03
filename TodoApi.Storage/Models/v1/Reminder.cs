@@ -1,17 +1,18 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using TodoApi.App.Attributes.Validators;
+using TodoApi.Storage.Attributes.Validators;
 
-namespace TodoApi.App.Models.v1
+namespace TodoApi.Storage.Models.v1
 {
     public class Reminder
     {
-        public required string Id { get; set; }
-        public required string TodoItemId { get; set; }
-        public required string Message { get; set; }
-        public required bool IsSent { get; set; }
-        public required DateTime ReminderDate { get; set; }
+        public string Id { get; set; }
+        public string TodoItemId { get; set; }
+        public string Message { get; set; }
+        public bool IsSent { get; set; }
+        public DateTime ReminderDate { get; set; }
 
         public static void Build(EntityTypeBuilder<Reminder> builder)
         {
@@ -46,7 +47,7 @@ namespace TodoApi.App.Models.v1
     {
         [MaxLength(500)]
         [MinLength(1)]
-        public string? Message { get; set; }
+        public string Message { get; set; }
 
         [FutureDate]
         public DateTime? ReminderDate { get; set; }

@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoApi.Core", "TodoApi.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoApi.App", "TodoApi.App\TodoApi.App.csproj", "{F6844465-68E1-84A5-D114-D1C1D6FE20FA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoApi.Storage", "TodoApi.Storage\TodoApi.Storage.csproj", "{18E9408D-24D7-EEDF-7709-C40DD0DAA2A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,11 +22,15 @@ Global
 		{F6844465-68E1-84A5-D114-D1C1D6FE20FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6844465-68E1-84A5-D114-D1C1D6FE20FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F6844465-68E1-84A5-D114-D1C1D6FE20FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{18E9408D-24D7-EEDF-7709-C40DD0DAA2A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{18E9408D-24D7-EEDF-7709-C40DD0DAA2A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{18E9408D-24D7-EEDF-7709-C40DD0DAA2A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{18E9408D-24D7-EEDF-7709-C40DD0DAA2A7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {94C97C88-BD5F-40A7-BA65-6BEC5FDF1807}
+		SolutionGuid = {C9C4872A-4EC1-4E18-B76C-4422DB73B11B}
 	EndGlobalSection
 EndGlobal

@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 
-namespace TodoApi.App.Attributes.Validators
+namespace TodoApi.Storage.Attributes.Validators
 {
     public class TagListAttribute : ValidationAttribute
     {

@@ -1,16 +1,20 @@
+using System;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
-namespace TodoApi.App.Storage
+namespace TodoApi.Storage
 {
-    public class TodoApiDbContext(DbContextOptions<TodoApiDbContext> options) : DbContext(options)
+    public class DataBaseContext(DbContextOptions<DataBaseContext> options) : DbContext(options)
     {
         public DbSet<Models.v1.TodoItem> TodoItemV1 { get; set; }
         public DbSet<Models.v1.Reminder> ReminderV1 { get; set; }
+        public DbSet<Models.v1.User> UserV1 { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             Models.v1.TodoItem.Build(modelBuilder.Entity<Models.v1.TodoItem>());
             Models.v1.Reminder.Build(modelBuilder.Entity<Models.v1.Reminder>());
+            Models.v1.User.Build(modelBuilder.Entity<Models.v1.User>());
         }
 
         public async Task EnsureContainersCreatedAsync()
@@ -27,5 +31,4 @@ namespace TodoApi.App.Storage
             }
         }
     }
-
 }

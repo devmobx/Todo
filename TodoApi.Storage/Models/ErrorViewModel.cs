@@ -1,9 +1,8 @@
-namespace TodoApi.App.Models
+namespace TodoApi.Storage.Models
 {
     public class ErrorViewModel
     {
-        public string? RequestId { get; set; }
-
+        public string RequestId { get; set; }
         public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
     }
 }

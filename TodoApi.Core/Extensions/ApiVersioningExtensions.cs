@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace TodoApi.App.Extensions;
+namespace TodoApi.Core.Extensions;
 
 public static class ApiVersioningExtensions
 {
