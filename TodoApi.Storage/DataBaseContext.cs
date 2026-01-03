@@ -7,13 +7,11 @@ namespace TodoApi.Storage
     public class DataBaseContext(DbContextOptions<DataBaseContext> options) : DbContext(options)
     {
         public DbSet<Models.v1.TodoItem> TodoItemV1 { get; set; }
-        public DbSet<Models.v1.Reminder> ReminderV1 { get; set; }
         public DbSet<Models.v1.User> UserV1 { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             Models.v1.TodoItem.Build(modelBuilder.Entity<Models.v1.TodoItem>());
-            Models.v1.Reminder.Build(modelBuilder.Entity<Models.v1.Reminder>());
             Models.v1.User.Build(modelBuilder.Entity<Models.v1.User>());
         }
 
@@ -26,8 +24,18 @@ namespace TodoApi.Storage
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Error creating Cosmos DB resources: {ex.Message}");
-                throw;
+                if (ex.Message.Contains("total throughput"))
+                {
+                    Console.WriteLine("⚠️  Throughput limit reached - container likely already exists");
+                }
+                else
+                {
+                    Console.WriteLine($"❌ Error creating Cosmos DB resources: {ex.Message}");
+                    if (!ex.Message.Contains("1028"))
+                    {
+                        throw;
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using TodoApi.Storage.Models;
 using TodoApi.Core.Services;
 using TodoApi.App.Services;
 using TodoApi.Storage.Models.v1.Auth;
