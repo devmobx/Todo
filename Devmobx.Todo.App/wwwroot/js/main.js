@@ -267,24 +267,8 @@ function showNewListModal() {
 }
 
 // Logout
-async function handleLogout() {
-  try {
-    const token = localStorage.getItem('authToken');
-    await fetch(`${API_BASE.replace('/v1', '')}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  }
+function handleLogout() {
+  window.location.href = '/MicrosoftIdentity/Account/SignOut';
 }
 
 // Alert Functions
