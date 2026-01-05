@@ -325,6 +325,21 @@
   color: #c05621;
 }
 
+/* Verify Email */
+.verification-code-input {
+  font-size: 1.5rem;
+  letter-spacing: 0.5rem;
+  text-align: center;
+  font-family: monospace;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: #6b7280;
+}
+
 /* Responsive Design */
 
 @media (max-width: 480px) {

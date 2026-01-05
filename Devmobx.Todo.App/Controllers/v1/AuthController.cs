@@ -165,7 +165,7 @@ namespace Devmobx.Todo.App.Controllers.v1
             return RedirectToAction("Login");
         }
 
-        // ==================== REGISTRATION ====================
+        // ==================== REGISTRATION (STEP 1: EMAIL) ====================
 
         [HttpGet]
         public IActionResult Register()
@@ -192,29 +192,95 @@ namespace Devmobx.Todo.App.Controllers.v1
                     return View(model);
                 }
 
-                // Step 2: Request password challenge
+                // Step 2: Request OTP challenge (sends email to user)
                 var challengeResult = await SignUpChallengeAsync(startResult.ContinuationToken!);
                 if (!challengeResult.Success)
                 {
-                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Unable to proceed with registration");
+                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Unable to send verification code");
                     return View(model);
                 }
 
-                // Step 3: Submit password
-                var passwordResult = await SignUpSubmitPasswordAsync(challengeResult.ContinuationToken!, model.Password);
+                // Store data in TempData for next step
+                TempData["SignUpEmail"] = model.Email;
+                TempData["SignUpPassword"] = model.Password;
+                TempData["SignUpContinuationToken"] = challengeResult.ContinuationToken;
+
+                // Redirect to OTP verification page
+                return RedirectToAction("VerifyEmail");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Registration error for {Email}", model.Email);
+                ModelState.AddModelError("", "An error occurred during registration. Please try again.");
+                return View(model);
+            }
+        }
+
+        // ==================== REGISTRATION (STEP 2: VERIFY EMAIL) ====================
+
+        [HttpGet]
+        public IActionResult VerifyEmail()
+        {
+            var email = TempData.Peek("SignUpEmail") as string;
+            if (string.IsNullOrEmpty(email))
+            {
+                return RedirectToAction("Register");
+            }
+
+            ViewBag.Email = email;
+            return View(new VerifyEmailViewModel());
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> VerifyEmail(VerifyEmailViewModel model)
+        {
+            var email = TempData.Peek("SignUpEmail") as string;
+            var password = TempData.Peek("SignUpPassword") as string;
+            var continuationToken = TempData.Peek("SignUpContinuationToken") as string;
+
+            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(continuationToken))
+            {
+                return RedirectToAction("Register");
+            }
+
+            ViewBag.Email = email;
+
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            try
+            {
+                // Step 3: Submit OTP to verify email
+                var otpResult = await SignUpSubmitOtpAsync(continuationToken, model.Code);
+                if (!otpResult.Success)
+                {
+                    ModelState.AddModelError("", otpResult.ErrorMessage ?? "Invalid verification code");
+                    return View(model);
+                }
+
+                // Step 4: Submit password
+                var passwordResult = await SignUpSubmitPasswordAsync(otpResult.ContinuationToken!, password);
                 if (!passwordResult.Success)
                 {
                     ModelState.AddModelError("", passwordResult.ErrorMessage ?? "Registration failed");
                     return View(model);
                 }
 
+                // Clear TempData
+                TempData.Remove("SignUpEmail");
+                TempData.Remove("SignUpPassword");
+                TempData.Remove("SignUpContinuationToken");
+
                 TempData["SuccessMessage"] = "Account created successfully! Please sign in.";
                 return RedirectToAction("Login");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Registration error for {Email}", model.Email);
-                ModelState.AddModelError("", "An error occurred during registration. Please try again.");
+                _logger.LogError(ex, "Email verification error for {Email}", email);
+                ModelState.AddModelError("", "An error occurred. Please try again.");
                 return View(model);
             }
         }
@@ -228,7 +294,7 @@ namespace Devmobx.Todo.App.Controllers.v1
             var requestBody = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
-                new KeyValuePair<string, string>("challenge_type", "password oob redirect"),
+                new KeyValuePair<string, string>("challenge_type", "oob password redirect"),
                 new KeyValuePair<string, string>("username", email)
             });
 
@@ -283,11 +349,12 @@ namespace Devmobx.Todo.App.Controllers.v1
         {
             var client = _httpClientFactory.CreateClient();
 
+            // Request OTP challenge - this sends the verification email
             var requestBody = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
                 new KeyValuePair<string, string>("continuation_token", continuationToken),
-                new KeyValuePair<string, string>("challenge_type", "password")
+                new KeyValuePair<string, string>("challenge_type", "oob")
             });
 
             _logger.LogInformation("Calling SignUp Challenge: {Endpoint}", SignUpChallengeEndpoint);
@@ -305,6 +372,83 @@ namespace Devmobx.Todo.App.Controllers.v1
             return ParseContinuationResponse(content);
         }
 
+        private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignUpSubmitOtpAsync(
+            string continuationToken, string otp)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("grant_type", "oob"),
+                new KeyValuePair<string, string>("oob", otp)
+            });
+
+            _logger.LogInformation("Calling SignUp Continue (OTP): {Endpoint}", SignUpContinueEndpoint);
+
+            var response = await client.PostAsync(SignUpContinueEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignUp OTP: {StatusCode} - {Content}", response.StatusCode, content);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (false, null, $"Verification failed. Status: {response.StatusCode}");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            // Check for continuation token FIRST - this indicates we can proceed
+            // Even with "credential_required" error, if there's a continuation_token, OTP was verified 【0】
+            if (root.TryGetProperty("continuation_token", out var nextToken))
+            {
+                var tokenValue = nextToken.GetString();
+
+                // credential_required with continuation_token = OTP verified, now need password
+                if (root.TryGetProperty("error", out var error))
+                {
+                    var errorCode = error.GetString();
+                    if (errorCode == "credential_required")
+                    {
+                        _logger.LogInformation("OTP verified successfully, credential (password) required next");
+                        return (true, tokenValue, null);
+                    }
+                }
+
+                // Any continuation token means success
+                return (true, tokenValue, null);
+            }
+
+            // Handle actual errors (no continuation token)
+            if (root.TryGetProperty("error", out var errorProp))
+            {
+                var errorCode = errorProp.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                var friendlyMessage = errorCode switch
+                {
+                    "invalid_grant" => "Invalid or expired verification code",
+                    "expired_token" => "Verification code has expired. Please start over.",
+                    "invalid_oob_value" => "Invalid verification code. Please check and try again.",
+                    _ => errorDesc
+                };
+
+                return (false, null, friendlyMessage);
+            }
+
+            // Success without continuation token (unlikely)
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null, null);
+            }
+
+            return (false, null, "Unexpected response from server");
+        }
+
         private async Task<(bool Success, string? ErrorMessage)> SignUpSubmitPasswordAsync(
             string continuationToken, string password)
         {
@@ -318,14 +462,13 @@ namespace Devmobx.Todo.App.Controllers.v1
                 new KeyValuePair<string, string>("password", password)
             });
 
-            _logger.LogInformation("Calling SignUp Continue: {Endpoint}", SignUpContinueEndpoint);
+            _logger.LogInformation("Calling SignUp Continue (password): {Endpoint}", SignUpContinueEndpoint);
 
             var response = await client.PostAsync(SignUpContinueEndpoint, requestBody);
             var content = await response.Content.ReadAsStringAsync();
 
             _logger.LogInformation("SignUp Password: {StatusCode} - {Content}", response.StatusCode, content);
 
-            // Success with empty response means user created
             if (response.IsSuccessStatusCode && string.IsNullOrWhiteSpace(content))
             {
                 return (true, null);
@@ -351,7 +494,6 @@ namespace Devmobx.Todo.App.Controllers.v1
                     "password_too_weak" => "Password must be at least 8 characters with uppercase, lowercase, numbers, and special characters",
                     "password_too_short" => "Password is too short (minimum 8 characters)",
                     "password_too_long" => "Password is too long",
-                    "password_recently_used" => "Please choose a different password",
                     "password_banned" => "This password is not allowed. Please choose another.",
                     _ => errorDesc
                 };
@@ -359,7 +501,6 @@ namespace Devmobx.Todo.App.Controllers.v1
                 return (false, friendlyMessage);
             }
 
-            // Success - user created
             return (true, null);
         }
 
