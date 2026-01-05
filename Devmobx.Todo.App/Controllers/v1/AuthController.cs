@@ -77,20 +77,20 @@ namespace Devmobx.Todo.App.Controllers.v1
                     return View(model);
                 }
 
-                // Step 2: Submit password challenge
-                var challengeResult = await SignInChallengeAsync(initiateResult.ContinuationToken!, model.Password);
+                // Step 2: Request password challenge
+                var challengeResult = await SignInChallengeAsync(initiateResult.ContinuationToken!);
                 if (!challengeResult.Success)
                 {
-                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Invalid credentials");
+                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Unable to authenticate");
                     ViewBag.ReturnUrl = returnUrl;
                     return View(model);
                 }
 
-                // Step 3: Get tokens
-                var tokenResult = await GetTokensAsync(challengeResult.ContinuationToken!);
+                // Step 3: Submit password and get tokens
+                var tokenResult = await SignInSubmitPasswordAsync(challengeResult.ContinuationToken!, model.Password);
                 if (tokenResult.TokenResponse == null)
                 {
-                    ModelState.AddModelError("", tokenResult.ErrorMessage ?? "Failed to obtain tokens");
+                    ModelState.AddModelError("", tokenResult.ErrorMessage ?? "Invalid credentials");
                     ViewBag.ReturnUrl = returnUrl;
                     return View(model);
                 }
@@ -130,11 +130,11 @@ namespace Devmobx.Todo.App.Controllers.v1
 
             _logger.LogInformation("SignIn Initiate: {StatusCode} - {Content}", response.StatusCode, content);
 
-            return ParseContinuationResponse(content);
+            return ParseSignInResponse(content);
         }
 
         private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignInChallengeAsync(
-            string continuationToken, string password)
+            string continuationToken)
         {
             var client = _httpClientFactory.CreateClient();
 
@@ -142,17 +142,116 @@ namespace Devmobx.Todo.App.Controllers.v1
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
                 new KeyValuePair<string, string>("continuation_token", continuationToken),
-                new KeyValuePair<string, string>("challenge_type", "password"),
-                new KeyValuePair<string, string>("grant_type", "password"),
-                new KeyValuePair<string, string>("password", password)
+                new KeyValuePair<string, string>("challenge_type", "password redirect")
             });
+
+            _logger.LogInformation("Calling SignIn Challenge: {Endpoint}", SignInChallengeEndpoint);
 
             var response = await client.PostAsync(SignInChallengeEndpoint, requestBody);
             var content = await response.Content.ReadAsStringAsync();
 
             _logger.LogInformation("SignIn Challenge: {StatusCode} - {Content}", response.StatusCode, content);
 
-            return ParseContinuationResponse(content, friendlyErrors: true);
+            return ParseSignInResponse(content);
+        }
+
+        private async Task<(TokenResponse? TokenResponse, string? ErrorMessage)> SignInSubmitPasswordAsync(
+    string continuationToken, string password)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("grant_type", "password"),
+                new KeyValuePair<string, string>("password", Uri.EscapeDataString(password)),
+                new KeyValuePair<string, string>("scope", "openid profile offline_access")
+            });
+
+            _logger.LogInformation("Token request - ClientId: {ClientId}, Password length: {PwdLen}",
+                _clientId, password?.Length ?? 0);
+
+            var response = await client.PostAsync(TokenEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Token response: {StatusCode} - {Content}", response.StatusCode, content);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (null, "Empty response from token endpoint");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var error))
+            {
+                var errorCode = error.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                var friendlyMessage = errorCode switch
+                {
+                    "invalid_grant" => "Invalid email or password",
+                    "invalid_client" => "Authentication configuration error",
+                    "user_not_found" => "No account found with this email",
+                    _ => errorDesc
+                };
+
+                return (null, friendlyMessage);
+            }
+
+            var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(content);
+            return (tokenResponse, null);
+        }
+
+        // Helper to parse sign-in responses (handles credential_required as success)
+        private (bool Success, string? ContinuationToken, string? ErrorMessage) ParseSignInResponse(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (false, null, "Empty response from server");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            // Check for continuation token first - even with "error" it might be success
+            if (root.TryGetProperty("continuation_token", out var token))
+            {
+                var tokenValue = token.GetString();
+
+                // credential_required with continuation_token = success, proceed to password
+                if (root.TryGetProperty("error", out var err) && err.GetString() == "credential_required")
+                {
+                    _logger.LogInformation("Sign-in requires credential (password) - this is expected");
+                    return (true, tokenValue, null);
+                }
+
+                return (true, tokenValue, null);
+            }
+
+            // Handle actual errors
+            if (root.TryGetProperty("error", out var error))
+            {
+                var errorCode = error.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                var friendlyMessage = errorCode switch
+                {
+                    "user_not_found" => "No account found with this email",
+                    "invalid_grant" => "Invalid credentials",
+                    _ => errorDesc
+                };
+
+                return (false, null, friendlyMessage);
+            }
+
+            return (false, null, "Unexpected response from server");
         }
 
         // ==================== LOGOUT ====================
@@ -205,7 +304,6 @@ namespace Devmobx.Todo.App.Controllers.v1
                 TempData["SignUpPassword"] = model.Password;
                 TempData["SignUpContinuationToken"] = challengeResult.ContinuationToken;
 
-                // Redirect to OTP verification page
                 return RedirectToAction("VerifyEmail");
             }
             catch (Exception ex)
@@ -312,7 +410,6 @@ namespace Devmobx.Todo.App.Controllers.v1
 
             if (!content.TrimStart().StartsWith("{"))
             {
-                _logger.LogError("Non-JSON response: {Content}", content);
                 return (false, null, "Invalid response from authentication server");
             }
 
@@ -349,12 +446,11 @@ namespace Devmobx.Todo.App.Controllers.v1
         {
             var client = _httpClientFactory.CreateClient();
 
-            // Request OTP challenge - this sends the verification email
             var requestBody = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
                 new KeyValuePair<string, string>("continuation_token", continuationToken),
-                new KeyValuePair<string, string>("challenge_type", "oob")
+                new KeyValuePair<string, string>("challenge_type", "oob redirect")
             });
 
             _logger.LogInformation("Calling SignUp Challenge: {Endpoint}", SignUpChallengeEndpoint);
@@ -369,7 +465,7 @@ namespace Devmobx.Todo.App.Controllers.v1
                 return (false, null, $"Server returned empty response. Status: {response.StatusCode}");
             }
 
-            return ParseContinuationResponse(content);
+            return ParseSignInResponse(content);
         }
 
         private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignUpSubmitOtpAsync(
@@ -400,28 +496,20 @@ namespace Devmobx.Todo.App.Controllers.v1
             using var doc = JsonDocument.Parse(content);
             var root = doc.RootElement;
 
-            // Check for continuation token FIRST - this indicates we can proceed
-            // Even with "credential_required" error, if there's a continuation_token, OTP was verified 【0】
+            // Check for continuation token FIRST
             if (root.TryGetProperty("continuation_token", out var nextToken))
             {
                 var tokenValue = nextToken.GetString();
 
-                // credential_required with continuation_token = OTP verified, now need password
-                if (root.TryGetProperty("error", out var error))
+                if (root.TryGetProperty("error", out var error) && error.GetString() == "credential_required")
                 {
-                    var errorCode = error.GetString();
-                    if (errorCode == "credential_required")
-                    {
-                        _logger.LogInformation("OTP verified successfully, credential (password) required next");
-                        return (true, tokenValue, null);
-                    }
+                    _logger.LogInformation("OTP verified successfully, password required next");
+                    return (true, tokenValue, null);
                 }
 
-                // Any continuation token means success
                 return (true, tokenValue, null);
             }
 
-            // Handle actual errors (no continuation token)
             if (root.TryGetProperty("error", out var errorProp))
             {
                 var errorCode = errorProp.GetString();
@@ -440,12 +528,6 @@ namespace Devmobx.Todo.App.Controllers.v1
                 return (false, null, friendlyMessage);
             }
 
-            // Success without continuation token (unlikely)
-            if (response.IsSuccessStatusCode)
-            {
-                return (true, null, null);
-            }
-
             return (false, null, "Unexpected response from server");
         }
 
@@ -459,8 +541,9 @@ namespace Devmobx.Todo.App.Controllers.v1
                 new KeyValuePair<string, string>("client_id", _clientId),
                 new KeyValuePair<string, string>("continuation_token", continuationToken),
                 new KeyValuePair<string, string>("grant_type", "password"),
-                new KeyValuePair<string, string>("password", password)
+                new KeyValuePair<string, string>("password", Uri.EscapeDataString(password))
             });
+
 
             _logger.LogInformation("Calling SignUp Continue (password): {Endpoint}", SignUpContinueEndpoint);
 
@@ -469,7 +552,8 @@ namespace Devmobx.Todo.App.Controllers.v1
 
             _logger.LogInformation("SignUp Password: {StatusCode} - {Content}", response.StatusCode, content);
 
-            if (response.IsSuccessStatusCode && string.IsNullOrWhiteSpace(content))
+            // Success can be empty response or response with continuation_token (for auto-signin)
+            if (response.IsSuccessStatusCode)
             {
                 return (true, null);
             }
@@ -481,6 +565,13 @@ namespace Devmobx.Todo.App.Controllers.v1
 
             using var doc = JsonDocument.Parse(content);
             var root = doc.RootElement;
+
+            // Check if there's a continuation_token - this means success
+            if (root.TryGetProperty("continuation_token", out _))
+            {
+                _logger.LogInformation("SignUp completed with continuation token");
+                return (true, null);
+            }
 
             if (root.TryGetProperty("error", out var error))
             {
@@ -494,7 +585,8 @@ namespace Devmobx.Todo.App.Controllers.v1
                     "password_too_weak" => "Password must be at least 8 characters with uppercase, lowercase, numbers, and special characters",
                     "password_too_short" => "Password is too short (minimum 8 characters)",
                     "password_too_long" => "Password is too long",
-                    "password_banned" => "This password is not allowed. Please choose another.",
+                    "password_banned" => "This password is too common. Please choose a more unique password.",
+                    "invalid_grant" => "This password is not allowed. Please choose another.",
                     _ => errorDesc
                 };
 
@@ -505,41 +597,6 @@ namespace Devmobx.Todo.App.Controllers.v1
         }
 
         // ==================== TOKEN HANDLING ====================
-
-        private async Task<(TokenResponse? TokenResponse, string? ErrorMessage)> GetTokensAsync(string continuationToken)
-        {
-            var client = _httpClientFactory.CreateClient();
-
-            var requestBody = new FormUrlEncodedContent(new[]
-            {
-                new KeyValuePair<string, string>("client_id", _clientId),
-                new KeyValuePair<string, string>("continuation_token", continuationToken),
-                new KeyValuePair<string, string>("grant_type", "continuation_token"),
-                new KeyValuePair<string, string>("scope", "openid profile email offline_access")
-            });
-
-            var response = await client.PostAsync(TokenEndpoint, requestBody);
-            var content = await response.Content.ReadAsStringAsync();
-
-            _logger.LogInformation("Token: {StatusCode} - {Content}", response.StatusCode, content);
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                return (null, "Empty response from token endpoint");
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                using var errorDoc = JsonDocument.Parse(content);
-                var errorDesc = errorDoc.RootElement.TryGetProperty("error_description", out var desc)
-                    ? desc.GetString()
-                    : "Failed to obtain tokens";
-                return (null, errorDesc);
-            }
-
-            var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(content);
-            return (tokenResponse, null);
-        }
 
         private async Task SignInUserAsync(TokenResponse tokenResponse, bool rememberMe)
         {
@@ -563,56 +620,6 @@ namespace Devmobx.Todo.App.Controllers.v1
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(claimsIdentity),
                 authProperties);
-        }
-
-        // ==================== HELPERS ====================
-
-        private (bool Success, string? ContinuationToken, string? ErrorMessage) ParseContinuationResponse(
-            string content, bool friendlyErrors = false)
-        {
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                return (false, null, "Empty response from server");
-            }
-
-            if (!content.TrimStart().StartsWith("{") && !content.TrimStart().StartsWith("["))
-            {
-                _logger.LogError("Non-JSON response: {Content}", content);
-                return (false, null, "Invalid response from authentication server");
-            }
-
-            using var doc = JsonDocument.Parse(content);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("error", out var error))
-            {
-                var errorCode = error.GetString();
-                var errorDesc = root.TryGetProperty("error_description", out var desc)
-                    ? desc.GetString()
-                    : errorCode;
-
-                string? friendlyMessage = errorDesc;
-                if (friendlyErrors)
-                {
-                    friendlyMessage = errorCode switch
-                    {
-                        "invalid_grant" => "Invalid email or password",
-                        "invalid_client" => "Authentication configuration error",
-                        "user_not_found" => "No account found with this email",
-                        "invalid_credentials" => "Invalid email or password",
-                        _ => errorDesc
-                    };
-                }
-
-                return (false, null, friendlyMessage);
-            }
-
-            if (root.TryGetProperty("continuation_token", out var token))
-            {
-                return (true, token.GetString(), null);
-            }
-
-            return (false, null, "Unexpected response from server");
         }
 
         private List<Claim> ParseIdToken(string idToken)
