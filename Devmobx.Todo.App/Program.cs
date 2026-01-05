@@ -1,9 +1,6 @@
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
-using Microsoft.Identity.Web;
-using Microsoft.Identity.Web.UI;
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.CookiePolicy;
 using System.Threading.RateLimiting;
@@ -12,10 +9,15 @@ using Devmobx.Todo.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// API versioning and controllers
 builder.Services.ConfigureApiVersion(1, 0);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
+// HTTP client for token requests to Entra ID
+builder.Services.AddHttpClient();
+
+// Rate limiting
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
@@ -30,38 +32,53 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = 429;
 });
 
+// Cookie policy
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
-    options.MinimumSameSitePolicy = SameSiteMode.None;
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
     options.Secure = CookieSecurePolicy.Always;
     options.HttpOnly = HttpOnlyPolicy.Always;
 });
 
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.Cookie.Name = ".AspNetCore.Auth";
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.None;
-});
-
-JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
-
-builder.Services.AddControllersWithViews();
-
+// Cookie-based authentication (replaces Microsoft Identity Web)
 builder.Services
-    .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Auth/Login";
+        options.LogoutPath = "/Auth/Logout";
+        options.AccessDeniedPath = "/Auth/AccessDenied";
+        options.Cookie.Name = ".AspNetCore.Auth";
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.HttpOnly = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
 
+        // Handle API requests differently (return 401 instead of redirect)
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
+
+// Controllers with global authorization policy
 builder.Services.AddControllersWithViews(options =>
 {
     var policy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build();
     options.Filters.Add(new AuthorizeFilter(policy));
-}).AddMicrosoftIdentityUI();
+});
 
+// Cosmos DB
 var cosmos = builder.Configuration.GetSection("Cosmos");
-
 builder.Services.AddDbContext<DataBaseContext>(options =>
     options.UseCosmos(
         accountEndpoint: cosmos["accountEndpoint"] ?? "",
@@ -69,15 +86,16 @@ builder.Services.AddDbContext<DataBaseContext>(options =>
         databaseName: cosmos["databaseName"] ?? ""
     ));
 
-
 var app = builder.Build();
 
+// Ensure database containers exist
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<DataBaseContext>();
     await dbContext.EnsureContainersCreatedAsync();
 }
 
+// Development tools
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

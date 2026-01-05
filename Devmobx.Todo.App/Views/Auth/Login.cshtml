@@ -1,0 +1,56 @@
+@model LoginViewModel
+
+@{
+    ViewData["Title"] = "Sign In";
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/main.css" />
+    <link rel="stylesheet" href="~/css/auth.css" />
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-logo">
+            <span class="login-logo-text">Devmobx</span>
+        </div>
+
+        <h1>Sign In</h1>
+        <p class="login-subtitle">Welcome back! Please sign in to continue.</p>
+
+        <form asp-controller="Auth" asp-action="Login" asp-route-returnUrl="@ViewBag.ReturnUrl" method="post">
+            @Html.AntiForgeryToken()
+
+            <div asp-validation-summary="All" class="text-danger"></div>
+
+            <div class="form-group">
+                <label asp-for="Email">Email Address</label>
+                <input asp-for="Email" class="form-control" type="email" placeholder="you@example.com" required />
+                <span asp-validation-for="Email" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Password">Password</label>
+                <input asp-for="Password" class="form-control" type="password" placeholder="••••••••" required />
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+
+            <div class="form-group-checkbox">
+                <input asp-for="RememberMe" type="checkbox" id="RememberMe" />
+                <label for="RememberMe">Remember me</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Sign In</button>
+        </form>
+
+        <div class="login-links">
+            <p>Don't have an account? <a asp-controller="Auth" asp-action="Register">Create Account</a></p>
+        </div>
+    </div>
+</body>
+</html>

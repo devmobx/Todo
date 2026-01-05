@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Devmobx.Todo.Storage;
 using Devmobx.Todo.Storage.Models.v1;
 using Devmobx.Todo.Core.Attributes;
+using System.Security.Claims;
 
 namespace Devmobx.Todo.App.Controllers.v1
 {
@@ -17,11 +18,21 @@ namespace Devmobx.Todo.App.Controllers.v1
         private readonly ILogger<TodoItemsController> _logger = logger;
 
 
+        private string GetUserId()
+        {
+            // Try different claim types that Entra ID might use
+            return User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("oid")
+                ?? User.FindFirstValue("sub")
+                ?? "";
+        }
+
+
         [Authorize]
         [HttpPost("item")]
         public async Task<ActionResult<TodoItem>> CreateTodoItem([FromBody] TodoItemCreateRequestBody item)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             if (string.IsNullOrEmpty(userId))
             {
@@ -59,7 +70,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpGet("item/{todoId}")]
         public async Task<ActionResult<TodoItem>> GetTodoItem([FromRoute] string todoId)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -81,7 +92,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpGet("items")]
         public async Task<IEnumerable<TodoItem>> GetAllTodoItems()
         {
-            var userId = "";
+            var userId = GetUserId();
 
             if (string.IsNullOrEmpty(userId))
             {
@@ -95,7 +106,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpPut("item/{todoId}")]
         public async Task<ActionResult<TodoItem>> UpdateTodoItem([FromRoute] string todoId, [FromBody] TodoItemUpdateRequestBody item)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -129,7 +140,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpDelete("item/{todoId}")]
         public async Task<ActionResult<TodoItem>> DeleteTodoItem([FromRoute] string todoId)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -157,7 +168,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpPost("item/{todoId}/reminder")]
         public async Task<ActionResult<Reminder>> CreateReminder([FromRoute] string todoId, [FromBody] ReminderCreateRequestBody reminder)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -199,7 +210,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpGet("item/{todoId}/reminder/{reminderId}")]
         public async Task<ActionResult<Reminder>> GetReminder([FromRoute] string todoId, [FromRoute] string reminderId)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -228,7 +239,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpGet("item/{todoId}/reminders")]
         public async Task<ActionResult<IEnumerable<Reminder>>> GetAllReminders([FromRoute] string todoId)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -250,7 +261,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpPut("item/{todoId}/reminder/{reminderId}")]
         public async Task<ActionResult<Reminder>> UpdateReminder([FromRoute] string todoId, [FromRoute] string reminderId, [FromBody] ReminderUpdateRequestBody reminder)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
@@ -288,7 +299,7 @@ namespace Devmobx.Todo.App.Controllers.v1
         [HttpDelete("item/{todoId}/reminder/{reminderId}")]
         public async Task<ActionResult> DeleteReminder([FromRoute] string todoId, [FromRoute] string reminderId)
         {
-            var userId = "";
+            var userId = GetUserId();
 
             var foundItem = await _db.TodoItemV1.FindAsync(todoId);
 
