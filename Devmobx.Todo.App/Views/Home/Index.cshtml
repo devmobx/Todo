@@ -1,149 +1,81 @@
-@{ ViewData["Title"] = "Dashboard"; }
+@model IEnumerable<Devmobx.Todo.Storage.Models.v1.TodoItem>
+@{
+    ViewData["Title"] = "My Todos";
+}
 
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Todo App</title>
-    <link rel="stylesheet" href="~/css/main.css" />
-    <link rel="stylesheet" href="~/css/home.css" />
-  </head>
-  <body>
-    <nav class="navbar">
-      <div class="navbar-container">
-        <div class="navbar-brand">
-          <img src="~/images/logo.png" alt="Todo App" class="navbar-logo" />
-          <span class="navbar-title">Todo App</span>
-        </div>
-        <div class="navbar-menu">
-          <a href="#" class="nav-link">Dashboard</a>
-          <a href="#" class="nav-link">Settings</a>
-          <button class="btn btn-outline btn-sm" onclick="handleLogout()">
-            Sign Out
-          </button>
-        </div>
-      </div>
-    </nav>
+<link rel="stylesheet" href="~/css/main.css" />
+<link rel="stylesheet" href="~/css/auth.css" />
+<link rel="stylesheet" href="~/css/todo.css" />
 
-    <div class="main-container">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h2>My Lists</h2>
-          <button class="btn btn-primary btn-sm" onclick="showNewListModal()">
-            + New List
-          </button>
+<div class="login-container todo-container">
+    <!-- Header -->
+    <div class="todo-header">
+        <div class="login-logo">
+            <span class="login-logo-text">✓</span>
         </div>
-        <nav class="sidebar-nav">
-          <a href="#" class="nav-item active">
-            <span class="nav-icon">📋</span>
-            All Tasks
-          </a>
-          <a href="#" class="nav-item">
-            <span class="nav-icon">⭐</span>
-            Important
-          </a>
-          <a href="#" class="nav-item">
-            <span class="nav-icon">📅</span>
-            Today
-          </a>
-          <a href="#" class="nav-item">
-            <span class="nav-icon">🗓️</span>
-            Upcoming
-          </a>
-          <a href="#" class="nav-item">
-            <span class="nav-icon">✅</span>
-            Completed
-          </a>
-        </nav>
-      </aside>
-
-      <main class="main-content">
-        <div class="content-header">
-          <div class="header-info">
-            <h1 id="pageTitle">All Tasks</h1>
-            <p class="header-subtitle" id="taskCount">0 tasks</p>
-          </div>
-          <button class="btn btn-primary" onclick="showNewTaskModal()">+ New Task</button>
-        </div>
-
-        <div id="tasksContainer" class="tasks-grid">
-          <div class="empty-state">
-            <div class="empty-icon">✨</div>
-            <h2>No tasks yet</h2>
-            <p>Create your first task to get started</p>
-            <button class="btn btn-primary" onclick="showNewTaskModal()">
-              Create Task
-            </button>
-          </div>
-        </div>
-      </main>
+        <h1>My Todos</h1>
+        <p class="login-subtitle">@User.Identity?.Name</p>
     </div>
 
-    <!-- New Task Modal -->
-    <div id="taskModal" class="modal" style="display: none">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>New Task</h2>
-          <button class="modal-close" onclick="closeTaskModal()">&times;</button>
+    <!-- Add Todo Form -->
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="form-group">
+            <div class="todo-input-group">
+                <input type="text" name="title" class="form-control" placeholder="What needs to be done?" required />
+                <button type="submit" class="btn btn-primary btn-add">Add</button>
+            </div>
         </div>
-        <form id="taskForm" class="modal-form">
-          <div class="form-group">
-            <label for="taskTitle" class="form-label">Title</label>
-            <input
-              type="text"
-              id="taskTitle"
-              class="form-input"
-              placeholder="Task title"
-              required />
-          </div>
+    </form>
 
-          <div class="form-group">
-            <label for="taskDescription" class="form-label">Description</label>
-            <textarea
-              id="taskDescription"
-              class="form-input"
-              placeholder="Task description"
-              rows="4"></textarea>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="taskPriority" class="form-label">Priority</label>
-              <select id="taskPriority" class="form-input" required>
-                <option value="1">Low</option>
-                <option value="2">Medium</option>
-                <option value="3" selected>Normal</option>
-                <option value="4">High</option>
-                <option value="5">Urgent</option>
-              </select>
+    <!-- Todo List -->
+    <div class="todo-list">
+        @if (!Model.Any())
+        {
+            <div class="todo-empty">
+                <p>No todos yet!</p>
+                <span>Add your first task above</span>
             </div>
+        }
+        else
+        {
+            @foreach (var todo in Model)
+            {
+                <div class="todo-item @(todo.IsCompleted ? "completed" : "")">
+                    <form asp-action="Toggle" method="post" class="todo-toggle-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@todo.Id" />
+                        <button type="submit" class="todo-checkbox @(todo.IsCompleted ? "checked" : "")">
+                            @(todo.IsCompleted ? "✓" : "")
+                        </button>
+                    </form>
 
-            <div class="form-group">
-              <label for="taskDueDate" class="form-label">Due Date</label>
-              <input type="date" id="taskDueDate" class="form-input" />
-            </div>
-          </div>
+                    <span class="todo-title">@todo.Title</span>
 
-          <div class="form-group">
-            <label for="taskTags" class="form-label">Tags</label>
-            <input
-              type="text"
-              id="taskTags"
-              class="form-input"
-              placeholder="Separate tags with commas" />
-          </div>
+                    <form asp-action="Delete" method="post" class="todo-delete-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@todo.Id" />
+                        <button type="submit" class="todo-delete">×</button>
+                    </form>
+                </div>
+            }
+        }
+    </div>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline" onclick="closeTaskModal()">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary">Create Task</button>
-          </div>
+    <!-- Footer Stats -->
+    @if (Model.Any())
+    {
+        <div class="todo-footer">
+            <span>@Model.Count(t => !t.IsCompleted) remaining</span>
+            <span>@Model.Count(t => t.IsCompleted) completed</span>
+        </div>
+    }
+
+    <!-- Logout -->
+    <div class="login-links">
+        <form asp-controller="Auth" asp-action="Logout" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-secondary">Sign Out</button>
         </form>
-      </div>
     </div>
-    <div id="alertContainer"></div>
-    <script src="~/js/main.js"></script>
-  </body>
-</html>
+</div>
