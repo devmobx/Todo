@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Devmobx.Todo.App.Models.v1.Auth;
 
@@ -15,7 +16,22 @@ namespace Devmobx.Todo.App.Controllers.v1
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<AuthController> _logger;
 
-        private const string TokenEndpoint = "https://devmobx.ciamlogin.com/f4140220-24e0-40ca-a1cf-d00df7398019/oauth2/v2.0/token";
+        private readonly string _tenantSubdomain;
+        private readonly string _tenantId;
+        private readonly string _clientId;
+
+        // Base URL
+        private string CiamBaseUrl => $"https://{_tenantSubdomain}.ciamlogin.com";
+
+        // Sign-in endpoints
+        private string SignInInitiateEndpoint => $"{CiamBaseUrl}/{_tenantId}/oauth2/v2.0/initiate";
+        private string SignInChallengeEndpoint => $"{CiamBaseUrl}/{_tenantId}/oauth2/v2.0/challenge";
+        private string TokenEndpoint => $"{CiamBaseUrl}/{_tenantId}/oauth2/v2.0/token";
+
+        // Sign-up endpoints
+        private string SignUpStartEndpoint => $"{CiamBaseUrl}/{_tenantId}/signup/v1.0/start";
+        private string SignUpChallengeEndpoint => $"{CiamBaseUrl}/{_tenantId}/signup/v1.0/challenge";
+        private string SignUpContinueEndpoint => $"{CiamBaseUrl}/{_tenantId}/signup/v1.0/continue";
 
         public AuthController(
             IConfiguration configuration,
@@ -25,7 +41,13 @@ namespace Devmobx.Todo.App.Controllers.v1
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+
+            _tenantSubdomain = "devmobx";
+            _tenantId = _configuration["AzureAd:TenantId"]!;
+            _clientId = _configuration["AzureAd:ClientId"]!;
         }
+
+        // ==================== LOGIN ====================
 
         [HttpGet]
         public IActionResult Login(string returnUrl = "/")
@@ -40,25 +62,353 @@ namespace Devmobx.Todo.App.Controllers.v1
         {
             if (!ModelState.IsValid)
             {
+                ViewBag.ReturnUrl = returnUrl;
                 return View(model);
             }
 
-            var (tokenResponse, errorMessage) = await GetTokenAsync(model.Email, model.Password);
-
-            if (tokenResponse == null)
+            try
             {
-                _logger.LogError("Login failed: {Error}", errorMessage);
-                ModelState.AddModelError("", errorMessage ?? "Invalid credentials");
+                // Step 1: Initiate sign-in
+                var initiateResult = await SignInInitiateAsync(model.Email);
+                if (!initiateResult.Success)
+                {
+                    ModelState.AddModelError("", initiateResult.ErrorMessage ?? "Unable to start authentication");
+                    ViewBag.ReturnUrl = returnUrl;
+                    return View(model);
+                }
+
+                // Step 2: Submit password challenge
+                var challengeResult = await SignInChallengeAsync(initiateResult.ContinuationToken!, model.Password);
+                if (!challengeResult.Success)
+                {
+                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Invalid credentials");
+                    ViewBag.ReturnUrl = returnUrl;
+                    return View(model);
+                }
+
+                // Step 3: Get tokens
+                var tokenResult = await GetTokensAsync(challengeResult.ContinuationToken!);
+                if (tokenResult.TokenResponse == null)
+                {
+                    ModelState.AddModelError("", tokenResult.ErrorMessage ?? "Failed to obtain tokens");
+                    ViewBag.ReturnUrl = returnUrl;
+                    return View(model);
+                }
+
+                // Sign in user
+                await SignInUserAsync(tokenResult.TokenResponse, model.RememberMe);
+
+                _logger.LogInformation("User {Email} logged in successfully", model.Email);
+                return LocalRedirect(returnUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Login error for {Email}", model.Email);
+                ModelState.AddModelError("", "An error occurred during login. Please try again.");
+                ViewBag.ReturnUrl = returnUrl;
+                return View(model);
+            }
+        }
+
+        // ==================== SIGN-IN FLOW ====================
+
+        private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignInInitiateAsync(string email)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("challenge_type", "password oob redirect"),
+                new KeyValuePair<string, string>("username", email)
+            });
+
+            _logger.LogInformation("Calling SignIn Initiate: {Endpoint}", SignInInitiateEndpoint);
+
+            var response = await client.PostAsync(SignInInitiateEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignIn Initiate: {StatusCode} - {Content}", response.StatusCode, content);
+
+            return ParseContinuationResponse(content);
+        }
+
+        private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignInChallengeAsync(
+            string continuationToken, string password)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("challenge_type", "password"),
+                new KeyValuePair<string, string>("grant_type", "password"),
+                new KeyValuePair<string, string>("password", password)
+            });
+
+            var response = await client.PostAsync(SignInChallengeEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignIn Challenge: {StatusCode} - {Content}", response.StatusCode, content);
+
+            return ParseContinuationResponse(content, friendlyErrors: true);
+        }
+
+        // ==================== LOGOUT ====================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Logout()
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction("Login");
+        }
+
+        // ==================== REGISTRATION ====================
+
+        [HttpGet]
+        public IActionResult Register()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register(RegisterViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
                 return View(model);
             }
 
-            var claims = ParseIdToken(tokenResponse.IdToken);
+            try
+            {
+                // Step 1: Start signup
+                var startResult = await SignUpStartAsync(model.Email);
+                if (!startResult.Success)
+                {
+                    ModelState.AddModelError("", startResult.ErrorMessage ?? "Unable to start registration");
+                    return View(model);
+                }
 
+                // Step 2: Request password challenge
+                var challengeResult = await SignUpChallengeAsync(startResult.ContinuationToken!);
+                if (!challengeResult.Success)
+                {
+                    ModelState.AddModelError("", challengeResult.ErrorMessage ?? "Unable to proceed with registration");
+                    return View(model);
+                }
+
+                // Step 3: Submit password
+                var passwordResult = await SignUpSubmitPasswordAsync(challengeResult.ContinuationToken!, model.Password);
+                if (!passwordResult.Success)
+                {
+                    ModelState.AddModelError("", passwordResult.ErrorMessage ?? "Registration failed");
+                    return View(model);
+                }
+
+                TempData["SuccessMessage"] = "Account created successfully! Please sign in.";
+                return RedirectToAction("Login");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Registration error for {Email}", model.Email);
+                ModelState.AddModelError("", "An error occurred during registration. Please try again.");
+                return View(model);
+            }
+        }
+
+        // ==================== SIGN-UP FLOW ====================
+
+        private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignUpStartAsync(string email)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("challenge_type", "password oob redirect"),
+                new KeyValuePair<string, string>("username", email)
+            });
+
+            _logger.LogInformation("Calling SignUp Start: {Endpoint}", SignUpStartEndpoint);
+
+            var response = await client.PostAsync(SignUpStartEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignUp Start: {StatusCode} - {Content}", response.StatusCode, content);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (false, null, $"Server returned empty response. Status: {response.StatusCode}");
+            }
+
+            if (!content.TrimStart().StartsWith("{"))
+            {
+                _logger.LogError("Non-JSON response: {Content}", content);
+                return (false, null, "Invalid response from authentication server");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var error))
+            {
+                var errorCode = error.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                var friendlyMessage = errorCode switch
+                {
+                    "user_already_exists" => "An account with this email already exists. Please sign in instead.",
+                    "invalid_request" => "Invalid email address format",
+                    _ => errorDesc
+                };
+
+                return (false, null, friendlyMessage);
+            }
+
+            if (root.TryGetProperty("continuation_token", out var token))
+            {
+                return (true, token.GetString(), null);
+            }
+
+            return (false, null, "Unexpected response from server");
+        }
+
+        private async Task<(bool Success, string? ContinuationToken, string? ErrorMessage)> SignUpChallengeAsync(
+            string continuationToken)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("challenge_type", "password")
+            });
+
+            _logger.LogInformation("Calling SignUp Challenge: {Endpoint}", SignUpChallengeEndpoint);
+
+            var response = await client.PostAsync(SignUpChallengeEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignUp Challenge: {StatusCode} - {Content}", response.StatusCode, content);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (false, null, $"Server returned empty response. Status: {response.StatusCode}");
+            }
+
+            return ParseContinuationResponse(content);
+        }
+
+        private async Task<(bool Success, string? ErrorMessage)> SignUpSubmitPasswordAsync(
+            string continuationToken, string password)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("grant_type", "password"),
+                new KeyValuePair<string, string>("password", password)
+            });
+
+            _logger.LogInformation("Calling SignUp Continue: {Endpoint}", SignUpContinueEndpoint);
+
+            var response = await client.PostAsync(SignUpContinueEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("SignUp Password: {StatusCode} - {Content}", response.StatusCode, content);
+
+            // Success with empty response means user created
+            if (response.IsSuccessStatusCode && string.IsNullOrWhiteSpace(content))
+            {
+                return (true, null);
+            }
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (false, $"Registration failed. Status: {response.StatusCode}");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var error))
+            {
+                var errorCode = error.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                var friendlyMessage = errorCode switch
+                {
+                    "password_too_weak" => "Password must be at least 8 characters with uppercase, lowercase, numbers, and special characters",
+                    "password_too_short" => "Password is too short (minimum 8 characters)",
+                    "password_too_long" => "Password is too long",
+                    "password_recently_used" => "Please choose a different password",
+                    "password_banned" => "This password is not allowed. Please choose another.",
+                    _ => errorDesc
+                };
+
+                return (false, friendlyMessage);
+            }
+
+            // Success - user created
+            return (true, null);
+        }
+
+        // ==================== TOKEN HANDLING ====================
+
+        private async Task<(TokenResponse? TokenResponse, string? ErrorMessage)> GetTokensAsync(string continuationToken)
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("continuation_token", continuationToken),
+                new KeyValuePair<string, string>("grant_type", "continuation_token"),
+                new KeyValuePair<string, string>("scope", "openid profile email offline_access")
+            });
+
+            var response = await client.PostAsync(TokenEndpoint, requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Token: {StatusCode} - {Content}", response.StatusCode, content);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return (null, "Empty response from token endpoint");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                using var errorDoc = JsonDocument.Parse(content);
+                var errorDesc = errorDoc.RootElement.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : "Failed to obtain tokens";
+                return (null, errorDesc);
+            }
+
+            var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(content);
+            return (tokenResponse, null);
+        }
+
+        private async Task SignInUserAsync(TokenResponse tokenResponse, bool rememberMe)
+        {
+            var claims = ParseIdToken(tokenResponse.IdToken);
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
             var authProperties = new AuthenticationProperties
             {
-                IsPersistent = model.RememberMe,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1)
+                IsPersistent = rememberMe,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn)
             };
 
             authProperties.StoreTokens(new[]
@@ -72,98 +422,78 @@ namespace Devmobx.Todo.App.Controllers.v1
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(claimsIdentity),
                 authProperties);
-
-            return LocalRedirect(returnUrl);
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Logout()
+        // ==================== HELPERS ====================
+
+        private (bool Success, string? ContinuationToken, string? ErrorMessage) ParseContinuationResponse(
+            string content, bool friendlyErrors = false)
         {
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return RedirectToAction("Login");
-        }
-
-        private async Task<(TokenResponse?, string?)> GetTokenAsync(string username, string password)
-        {
-            var client = _httpClientFactory.CreateClient();
-
-            var clientId = _configuration["AzureAd:ClientId"];
-            var clientSecret = _configuration["AzureAd:ClientSecret"];
-            var scope = "openid profile email offline_access";
-
-            _logger.LogInformation("Requesting token for user: {User}", username);
-            _logger.LogInformation("Using ClientId: {ClientId}", clientId);
-            _logger.LogInformation("Using Scope: {Scope}", scope);
-
-            var requestBody = new FormUrlEncodedContent(new[]
+            if (string.IsNullOrWhiteSpace(content))
             {
-                new KeyValuePair<string, string>("grant_type", "password"),
-                new KeyValuePair<string, string>("client_id", clientId!),
-                new KeyValuePair<string, string>("client_secret", clientSecret!),
-                new KeyValuePair<string, string>("scope", scope),
-                new KeyValuePair<string, string>("username", username),
-                new KeyValuePair<string, string>("password", password)
-            });
-
-            var response = await client.PostAsync(TokenEndpoint, requestBody);
-            var content = await response.Content.ReadAsStringAsync();
-
-            _logger.LogInformation("Token response status: {StatusCode}", response.StatusCode);
-            _logger.LogInformation("Token response: {Response}", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                // Parse error response
-                try
-                {
-                    using var doc = JsonDocument.Parse(content);
-                    var root = doc.RootElement;
-
-                    var error = root.TryGetProperty("error", out var e) ? e.GetString() : "unknown";
-                    var errorDescription = root.TryGetProperty("error_description", out var ed) ? ed.GetString() : content;
-
-                    _logger.LogError("Token error: {Error} - {Description}", error, errorDescription);
-
-                    return (null, errorDescription);
-                }
-                catch
-                {
-                    return (null, $"HTTP {response.StatusCode}: {content}");
-                }
+                return (false, null, "Empty response from server");
             }
 
-            var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(content);
-            return (tokenResponse, null);
+            if (!content.TrimStart().StartsWith("{") && !content.TrimStart().StartsWith("["))
+            {
+                _logger.LogError("Non-JSON response: {Content}", content);
+                return (false, null, "Invalid response from authentication server");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var error))
+            {
+                var errorCode = error.GetString();
+                var errorDesc = root.TryGetProperty("error_description", out var desc)
+                    ? desc.GetString()
+                    : errorCode;
+
+                string? friendlyMessage = errorDesc;
+                if (friendlyErrors)
+                {
+                    friendlyMessage = errorCode switch
+                    {
+                        "invalid_grant" => "Invalid email or password",
+                        "invalid_client" => "Authentication configuration error",
+                        "user_not_found" => "No account found with this email",
+                        "invalid_credentials" => "Invalid email or password",
+                        _ => errorDesc
+                    };
+                }
+
+                return (false, null, friendlyMessage);
+            }
+
+            if (root.TryGetProperty("continuation_token", out var token))
+            {
+                return (true, token.GetString(), null);
+            }
+
+            return (false, null, "Unexpected response from server");
         }
 
         private List<Claim> ParseIdToken(string idToken)
         {
             var claims = new List<Claim>();
-
-            if (string.IsNullOrEmpty(idToken))
-            {
-                _logger.LogWarning("ID token is null or empty");
-                return claims;
-            }
+            if (string.IsNullOrEmpty(idToken)) return claims;
 
             var parts = idToken.Split('.');
             if (parts.Length != 3) return claims;
 
             try
             {
-                var payload = parts[1];
-                payload = payload.Replace('-', '+').Replace('_', '/');
+                var payload = parts[1].Replace('-', '+').Replace('_', '/');
                 switch (payload.Length % 4)
                 {
                     case 2: payload += "=="; break;
                     case 3: payload += "="; break;
                 }
 
-                var jsonBytes = Convert.FromBase64String(payload);
-                var json = System.Text.Encoding.UTF8.GetString(jsonBytes);
+                var json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
 
-                _logger.LogInformation("ID token payload: {Payload}", json);
+                _logger.LogInformation("ID token claims: {Claims}", json);
 
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
@@ -183,117 +513,6 @@ namespace Devmobx.Todo.App.Controllers.v1
             }
 
             return claims;
-        }
-
-        [HttpGet]
-        public IActionResult Register()
-        {
-            return View();
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Register(RegisterViewModel model)
-        {
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
-
-            var result = await CreateUserAsync(model);
-
-            if (!result.Success)
-            {
-                ModelState.AddModelError("", result.ErrorMessage ?? "Registration failed");
-                return View(model);
-            }
-
-            // Optionally auto-login after registration
-            TempData["SuccessMessage"] = "Account created successfully. Please sign in.";
-            return RedirectToAction("Login");
-        }
-
-        private async Task<(bool Success, string? ErrorMessage)> CreateUserAsync(RegisterViewModel model)
-        {
-            var client = _httpClientFactory.CreateClient();
-
-            var tenantId = _configuration["AzureAd:TenantId"];
-            var clientId = _configuration["AzureAd:ClientId"];
-            var clientSecret = _configuration["AzureAd:ClientSecret"];
-
-            // First, get an access token for Microsoft Graph API
-            var tokenRequest = new FormUrlEncodedContent(new[]
-            {
-        new KeyValuePair<string, string>("grant_type", "client_credentials"),
-        new KeyValuePair<string, string>("client_id", clientId!),
-        new KeyValuePair<string, string>("client_secret", clientSecret!),
-        new KeyValuePair<string, string>("scope", "https://graph.microsoft.com/.default")
-    });
-
-            var tokenResponse = await client.PostAsync(
-                $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token",
-                tokenRequest);
-
-            if (!tokenResponse.IsSuccessStatusCode)
-            {
-                var error = await tokenResponse.Content.ReadAsStringAsync();
-                _logger.LogError("Failed to get Graph token: {Error}", error);
-                return (false, "Unable to connect to identity service");
-            }
-
-            var tokenContent = await tokenResponse.Content.ReadAsStringAsync();
-            using var tokenDoc = JsonDocument.Parse(tokenContent);
-            var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString();
-
-            // Create the user via Microsoft Graph API
-            var userPayload = new
-            {
-                accountEnabled = true,
-                displayName = model.DisplayName,
-                mailNickname = model.Email.Split('@')[0],
-                userPrincipalName = $"{model.Email.Replace("@", "_")}@devmobx.onmicrosoft.com",
-                passwordProfile = new
-                {
-                    forceChangePasswordNextSignIn = false,
-                    password = model.Password
-                },
-                identities = new[]
-                {
-            new
-            {
-                signInType = "emailAddress",
-                issuer = "devmobx.onmicrosoft.com",
-                issuerAssignedId = model.Email
-            }
-        }
-            };
-
-            var createRequest = new HttpRequestMessage(HttpMethod.Post, "https://graph.microsoft.com/v1.0/users")
-            {
-                Content = new StringContent(
-                    JsonSerializer.Serialize(userPayload),
-                    System.Text.Encoding.UTF8,
-                    "application/json")
-            };
-            createRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-
-            var createResponse = await client.SendAsync(createRequest);
-            var createContent = await createResponse.Content.ReadAsStringAsync();
-
-            _logger.LogInformation("User creation response: {StatusCode} - {Content}",
-                createResponse.StatusCode, createContent);
-
-            if (!createResponse.IsSuccessStatusCode)
-            {
-                using var errorDoc = JsonDocument.Parse(createContent);
-                var errorMessage = errorDoc.RootElement
-                    .GetProperty("error")
-                    .GetProperty("message")
-                    .GetString();
-                return (false, errorMessage);
-            }
-
-            return (true, null);
         }
     }
 }

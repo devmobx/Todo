@@ -29,14 +29,8 @@
             <div asp-validation-summary="All" class="validation-summary-errors"></div>
 
             <div class="form-group">
-                <label asp-for="DisplayName">Display Name</label>
-                <input asp-for="DisplayName" class="form-control" placeholder="John Doe" />
-                <span asp-validation-for="DisplayName" class="text-danger"></span>
-            </div>
-
-            <div class="form-group">
                 <label asp-for="Email">Email Address</label>
-                <input asp-for="Email" class="form-control" type="email" placeholder="you@example.com" />
+                <input asp-for="Email" class="form-control" type="email" placeholder="you@example.com" autofocus />
                 <span asp-validation-for="Email" class="text-danger"></span>
             </div>
 
@@ -44,6 +38,7 @@
                 <label asp-for="Password">Password</label>
                 <input asp-for="Password" class="form-control" type="password" placeholder="••••••••" />
                 <span asp-validation-for="Password" class="text-danger"></span>
+                <small class="form-hint">At least 8 characters with uppercase, lowercase, and numbers</small>
             </div>
 
             <div class="form-group">
