@@ -1,1 +1,4 @@
-resource_group_name = "devmobx-todo-dev-rg"
+env                   = "dev"
+project               = "Todo - Dev"
+resource_group_name   = "devmobx-todo-dev-rg"
+cosmosdb_account_name = "devmobx-todo-dev-db"

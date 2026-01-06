@@ -1,5 +1,9 @@
+variable "env" {
+  type        = string
+  description = "environment"
+}
+
 variable "project" {
-  default     = "Todo"
   type        = string
   description = "Project Name"
 }
@@ -9,13 +13,8 @@ variable "resource_group_name" {
   description = "Name of the resource group"
 }
 
-variable "default_location" {
+variable "location" {
   default     = "westeurope"
   type        = string
-  description = "Default location for deployment"
-}
-
-variable "env" {
-  type        = string
-  description = "environment"
+  description = "Deployment location"
 }
