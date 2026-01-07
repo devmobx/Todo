@@ -92,7 +92,6 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<DataBaseContext>();
-    await dbContext.EnsureContainersCreatedAsync();
 }
 
 // Development tools
