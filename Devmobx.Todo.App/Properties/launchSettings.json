@@ -1,15 +1,40 @@
 ﻿{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "Dev": {
+    "dev": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
       "applicationUrl": "https://localhost:7076;http://localhost:5282",
       "environmentVariables": {
-        "KEYVAULT_ENDPOINT": "",
-        "SERVICEIDENTITY_CLIENTID": "",
+        "TENANT_SUB_DOMAIN": "devmobxtododev",
+        "DATABASE_NAME": "TodoDataDev",
+        "KEYVAULT_ENDPOINT": "https://devmobx-todo-dev-kv.vault.azure.net/",
         "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "staging": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "https://localhost:7076;http://localhost:5282",
+      "environmentVariables": {
+        "TENANT_SUB_DOMAIN": "devmobxtodostaging",
+        "DATABASE_NAME": "TodoDataDev",
+        "KEYVAULT_ENDPOINT": "https://devmobx-todo-dev-kv.vault.azure.net/",
+        "ASPNETCORE_ENVIRONMENT": "Staging"
+      }
+    },
+    "prod": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "https://localhost:7076;http://localhost:5282",
+      "environmentVariables": {
+        "TENANT_SUB_DOMAIN": "devmobxtodoprod",
+        "DATABASE_NAME": "TodoDataDev",
+        "KEYVAULT_ENDPOINT": "https://devmobx-todo-dev-kv.vault.azure.net/",
+        "ASPNETCORE_ENVIRONMENT": "Production"
       }
     }
   }

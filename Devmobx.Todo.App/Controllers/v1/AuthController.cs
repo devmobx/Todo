@@ -42,9 +42,9 @@ namespace Devmobx.Todo.App.Controllers.v1
             _httpClientFactory = httpClientFactory;
             _logger = logger;
 
-            _tenantSubdomain = _configuration["TenantSubDomain"]!;
-            _tenantId = _configuration["AzureAd:TenantId"]!;
-            _clientId = _configuration["AzureAd:ClientId"]!;
+            _tenantSubdomain = Environment.GetEnvironmentVariable("TENANT_SUB_DOMAIN")!;
+            _tenantId = _configuration["TenantId"]!;
+            _clientId = _configuration["ClientId"]!;
         }
 
         // ==================== LOGIN ====================

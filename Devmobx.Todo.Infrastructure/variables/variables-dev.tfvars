@@ -1,5 +1,6 @@
 env                    = "dev"
 project                = "Todo - Dev"
 resource_group_name    = "devmobx-todo-dev-rg"
+keyvault_name          = "devmobx-todo-dev-kv"
 cosmosdb_account_name  = "devmobx-todo-dev-db"
 cosmosdb_database_name = "TodoDataDev"

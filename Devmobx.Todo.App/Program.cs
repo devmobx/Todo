@@ -9,6 +9,8 @@ using Devmobx.Todo.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.ConfigureKeyVault();
+
 // API versioning and controllers
 builder.Services.ConfigureApiVersion(1, 0);
 builder.Services.AddControllers();
@@ -78,12 +80,11 @@ builder.Services.AddControllersWithViews(options =>
 });
 
 // Cosmos DB
-var cosmos = builder.Configuration.GetSection("Cosmos");
 builder.Services.AddDbContext<DataBaseContext>(options =>
     options.UseCosmos(
-        accountEndpoint: cosmos["accountEndpoint"] ?? "",
-        accountKey: cosmos["accountKey"] ?? "",
-        databaseName: cosmos["databaseName"] ?? ""
+        accountEndpoint: builder.Configuration["CosmosDbEndpoint"]!,
+        accountKey: builder.Configuration["CosmosDbPrimaryKey"]!,
+        databaseName: Environment.GetEnvironmentVariable("DATABASE_NAME")!
     ));
 
 var app = builder.Build();

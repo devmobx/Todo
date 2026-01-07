@@ -1,5 +1,6 @@
 env                    = "staging"
 project                = "Todo - Staging"
 resource_group_name    = "devmobx-todo-staging-rg"
+keyvault_name          = "devmobx-todo-staging-kv"
 cosmosdb_account_name  = "devmobx-todo-staging-db"
 cosmosdb_database_name = "TodoDataStaging"

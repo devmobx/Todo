@@ -408,9 +408,4 @@ ASALocalRun/
 docs/*
 /Infrastructure
 
-
-# App Settings
-**/appsettings**
-!**/appsettings.json
-
 **/obj
