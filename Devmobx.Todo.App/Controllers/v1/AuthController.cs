@@ -43,8 +43,8 @@ namespace Devmobx.Todo.App.Controllers.v1
             _logger = logger;
 
             _tenantSubdomain = Environment.GetEnvironmentVariable("TENANT_SUB_DOMAIN")!;
+            _clientId = Environment.GetEnvironmentVariable("CLIENT_ID")!;
             _tenantId = _configuration["TenantId"]!;
-            _clientId = _configuration["ClientId"]!;
         }
 
         // ==================== LOGIN ====================

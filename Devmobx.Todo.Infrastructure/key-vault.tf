@@ -52,17 +52,10 @@ resource "azurerm_key_vault_access_policy" "kv_access_policy" {
   ]
 }
 
-# Cosmos Tenant secrets
+# Tenant secrets
 resource "azurerm_key_vault_secret" "tenant_id" {
   name         = "TenantId"
   value        = data.azurerm_client_config.current.tenant_id
-  key_vault_id = azurerm_key_vault.kv.id
-  depends_on   = [azurerm_key_vault_access_policy.kv_access_policy]
-}
-
-resource "azurerm_key_vault_secret" "client_id" {
-  name         = "ClientId"
-  value        = data.azurerm_client_config.current.client_id
   key_vault_id = azurerm_key_vault.kv.id
   depends_on   = [azurerm_key_vault_access_policy.kv_access_policy]
 }
